@@ -1,8 +1,75 @@
-# dx-dojo-25-sample-mcp 解説
+# 店舗売上データ管理用 MCP サンプルコード
 
-この README は、mcp 配下のサンプルコードを非エンジニア向けにやさしく説明したものです。
+![このリポジトリの説明。店舗・日ごとに売り上げデータがCSVで管理されているシステムにおいて、MCPを使ってデータを操作する様子](docs\top.webp)
 
 このプロジェクトは、CSV で管理している店舗売上データを MCP サーバー経由で「取得・集計・保存」できるようにしたサンプルです。
+
+## 必要な環境
+
+- Node.js 20 以降
+  - npm, 
+- MCPクライアント (Claude Desktop など)
+
+## セットアップ方法
+
+このリポジトリをクローンします。
+
+```bash
+git clone https://github.com/eXpresser-UXM/20260617-dx-dojo-mcp-server-sample.git
+```
+
+関連する依存関係をインストールします。このプロジェクトルートをカレントディレクトリにして、下記コマンドを実行します。
+
+```bash
+npm install
+```
+
+MCPサーバーが正しくツールを提供できているかを確認するため、下記コマンドでインスペクタを動かします。
+
+```bash
+npm run inspect
+```
+
+インスペクタを起動すると、ブラウザが起動します。 \
+左側ペインの ▷Connect をクリックします。 \
+MCPサーバーに接続されると、右側ペインに「売上管理システム」に接続したことが表示されます。 \
+上部からToolsをクリックし、List Tools をクリックすると、このMCPサーバーが提供しているツールの一覧が表示されます。 \
+
+![MCP Inspector にて、MCPサーバーのツールリストが表示されていることを確認](docs/inspector.webp)
+
+ターミナルに戻り、インスペクタを停止します。
+
+MCPクライアントのMCPサーバー接続設定で、売上管理データに接続できるように構成します。
+
+以下は、Claude Desktop の例 (claude_desktop_config.json) です。
+
+``` json
+{
+  "mcpServers": {
+    "dx-dojo-sample-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "tsx",
+        "/path/to/this/project/mcp/main-stdio.ts"
+      ]
+    },
+    # other MCP server configurations...
+  },
+  # other configurations...
+}
+```
+
+MCPクライアントを再起動して、売上管理システムに接続するようなプロンプトを実行します。
+例えば以下の通りです。
+
+```prompt
+2025年12月の全店舗の売上を確認してください。
+```
+
+実行すると以下のようなイメージで、MCPサーバーから売上データが返ってきます。
+
+![Claude Desktopでの実行例](docs/get-sales.webp)
 
 ## 全体像（まずここだけ押さえれば OK）
 
