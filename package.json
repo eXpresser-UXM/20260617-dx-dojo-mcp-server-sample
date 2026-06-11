@@ -1,0 +1,29 @@
+{
+  "name": "dx-dojo-25-sample-mcp",
+  "version": "1.0.0",
+  "description": "",
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "generate": "tsx storage/generate-examples.ts",
+    "inspect": "mcp-inspector tsx mcp/main-stdio.ts",
+    "serve": "tsx mcp/main-stdio.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "csv": "^6.5.1",
+    "date-fns": "^4.4.0",
+    "fs": "^0.0.1-security",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.15.0",
+    "@types/node": "^25.9.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
