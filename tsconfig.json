@@ -7,7 +7,7 @@
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
-    "module": "es2020",
+    "module": "esnext",
     "target": "esnext",
     "types": [],
     // For nodejs:
