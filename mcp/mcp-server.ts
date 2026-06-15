@@ -1,10 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
 import { listAvailableDate } from "./tools/list-available-date";
 import { getSalesRowdata } from "./tools/get-sales-rowdata";
-import { getSalesStatisticsPerDate } from "./tools/get-sales-statistics-perdate";
-import { getSalesStatisticsPerItem } from "./tools/get-sales-statistics-peritem";
 import { saveDailySales } from "./tools/save-daily-sales";
-import { registerSalesAssistant } from "./tools/register-sales-assistant";
+import { getStores } from "./tools/get-stores";
+import { getItems } from "./tools/get-items";
 
 export const getServer = () => {
   // MCP サーバー本体を初期化。
@@ -18,13 +17,11 @@ export const getServer = () => {
   );
 
   // 以降で業務機能をサーバーに登録する。
-  // 登録順は必須ではないが、機能を把握しやすいように一覧系→集計系→保存系→対話系の順に並べている。
+  getStores(server);
+  getItems(server);
   listAvailableDate(server);
   getSalesRowdata(server);
-  getSalesStatisticsPerDate(server);
-  getSalesStatisticsPerItem(server);
   saveDailySales(server);
-  registerSalesAssistant(server);
 
   // すべて登録済みのサーバーを呼び出し元へ返す。
   return server;

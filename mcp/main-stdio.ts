@@ -11,7 +11,6 @@ const runStdio = async () => {
 
   // サーバーを接続開始し、受信待ち状態にする。
   await server.connect(transport);
-  console.error("MCP STDIO Server running...");
 }
 
 // 起動失敗時は理由を表示し、異常終了であることが分かるように終了コード 1 を返す。
