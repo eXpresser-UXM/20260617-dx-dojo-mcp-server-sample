@@ -53,9 +53,16 @@ async function generateStoreSalesData(storeName: string, storeQuantity: number):
     acc[menu.name] = getRandomInt(10, 40);
     return acc;
   }, {} as Record<string, number>); // 全メニューの初期数量の合計
+  
   // ベース値に対するランダムな揺らぎを生成するための関数
-  const jitterQuantityFunc = (date: Date) => (date.getDay() - 3)^2 // 曜日による傾向を加味 (例: 土日は売上が上がり、水曜日は売上が落ちる傾向があると仮定)
-  const baseupQuantityFunc = (date: Date) => differenceInDays(date, startDate) * 0.05; // 日数経過による全体的な売上増加傾向を加味
+  const jitterRateFunc = (date: Date) => {
+    // 曜日による傾向を加味 (土日は売上が上がり、水曜日は売上が落ちる傾向があると仮定)
+    const dayOfWeekEffect = (date.getDay() - 3) ** 2 / 9;
+    // 0.75～1.25の範囲で揺らぎを生成
+    const Jitter = 0.75 + dayOfWeekEffect * 0.5;
+    return Jitter;
+  }
+  const baseupRateFunc = (date: Date) => 1 + differenceInDays(date, startDate) * 0.05; // 日数経過による全体的な売上増加傾向を加味
 
   // 日付を1日ずつ進めるループ
   while (currentDate <= endDate) {
@@ -66,7 +73,7 @@ async function generateStoreSalesData(storeName: string, storeQuantity: number):
     // 1. メニューごとの売上データを生成
     for (const menu of MENUS) {
       // ベース数量に曜日や経過日数による傾向を加味して、最終的な売上数量のベースを決定
-      const todayBaseQuantity = baseQuantity[menu.name]! + jitterQuantityFunc(currentDate) + baseupQuantityFunc(currentDate);
+      const todayBaseQuantity = baseQuantity[menu.name]! * jitterRateFunc(currentDate) * baseupRateFunc(currentDate);
       // ベース数量の75%～125%の範囲でランダムに決定
       const quantity = randomInt(Math.round(0.75 * todayBaseQuantity), Math.round(1.25 * todayBaseQuantity));
       // 売上金額の計算
