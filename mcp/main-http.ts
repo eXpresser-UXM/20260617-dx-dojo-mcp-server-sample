@@ -1,7 +1,6 @@
-import type { Request, Response } from "express";
+import express, { type Request, type Response } from "express";
 import { getServer } from "./mcp-server";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types";
 import { InMemoryEventStore } from "@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore";
 import { randomUUID } from "crypto";
@@ -12,7 +11,8 @@ const MCP_PORT = Number.parseInt(
   10
 );
 
-const app = createMcpExpressApp();
+const app = express();
+app.use(express.json());
 
 // Map to store transports by session ID
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
