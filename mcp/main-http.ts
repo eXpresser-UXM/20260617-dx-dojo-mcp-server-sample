@@ -6,9 +6,11 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types";
 import { InMemoryEventStore } from "@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore";
 import { randomUUID } from "crypto";
 
-const MCP_PORT = process.env.MCP_PORT
-  ? Number.parseInt(process.env.MCP_PORT, 10)
-  : 3000;
+// Render の PORT 環境変数を最優先にする
+const MCP_PORT = Number.parseInt(
+  process.env.PORT || process.env.MCP_PORT || "3000",
+  10
+);
 
 const app = createMcpExpressApp();
 

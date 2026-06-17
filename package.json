@@ -11,7 +11,7 @@
   "scripts": {
     "generate": "tsx generate-examples.ts",
     "inspect": "mcp-inspector tsx mcp/main-stdio.ts",
-    "serve": "tsx mcp/main-sse.ts"
+    "serve": "tsx mcp/main-http.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
