@@ -3,6 +3,7 @@ import { projectRoot, type RegisterTool } from "../lib";
 import fs from "fs/promises";
 import * as csv from "csv";
 import {addDays, format, parse} from "date-fns";
+import { getAvailableStores } from "./get-stores";
 
 // 店舗名と取得期間を受け取る入力スキーマ。
 const inputSchema = z.object({
@@ -36,8 +37,26 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
     description: '店舗内の売り上げデータを取得します。日付・メニューごとにその店舗の売上高を計算します。取得期間が大きいと返却データが大きくなる可能性があります。',
     inputSchema: inputSchema,
     outputSchema: outputSchema,
+    annotations: {
+      readOnlyHint: true, // データの取得のみを行うため、readOnlyHint は true に設定。
+      destructiveHint: false, // データを変更しないため、destructiveHint は false に設定。
+      idempotentHint: true, // 同じ入力であれば何度呼び出しても同じ結果になるため、idempotentHint は true に設定。
+      openWorldHint: false, // 入力スキーマで受け取る情報が集計処理に必要なため、openWorldHint は false に設定。
+    }
   },
   async ({storeName, from, to}) => {
+    if (!(await getAvailableStores()).includes(storeName)) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `指定された店舗名 "${storeName}" は存在しません。店名のリストを取得してから再度指定してください。`
+          }
+        ]
+      };
+    }
+
     // 文字列日付を Date に変換して比較可能にする。
     const dateFrom = parse(from, 'yyyyMMdd', new Date())
     const dateTo = parse(to, 'yyyyMMdd', new Date())
@@ -47,7 +66,10 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
       return {
         isError: true,
         content: [
-          {type: "text", text: "取得期間の開始日が終了日よりも後になっています。正しい期間を指定してください。"}
+          {
+            type: "text", 
+            text: "取得期間の開始日が終了日よりも後になっています。正しい期間を指定してください。"
+          }
         ]
       }
     }
@@ -61,7 +83,7 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
     // 日ごとの CSV 読み込みを並列実行し、全日分をまとめて取得する。
     const sales = await Promise.all(
       dateList.map(async (date) => {
-        const filePath = `${projectRoot}/storage/${date}_${storeName}.csv`;
+        const filePath = `${projectRoot}/storage/csv/${date}_${storeName}.csv`;
 
         try {
           // CSV をテキストで読み込み、ヘッダ付きレコードへパース。

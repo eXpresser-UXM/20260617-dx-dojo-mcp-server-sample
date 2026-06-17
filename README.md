@@ -18,6 +18,12 @@
 git clone https://github.com/eXpresser-UXM/20260617-dx-dojo-mcp-server-sample.git
 ```
 
+クローンしたディレクトリに移動します。
+
+```bash
+cd 20260617-dx-dojo-mcp-server-sample
+```
+
 関連する依存関係をインストールします。このプロジェクトルートをカレントディレクトリにして、下記コマンドを実行します。
 
 ```bash
@@ -42,6 +48,7 @@ MCPサーバーに接続されると、右側ペインに「売上管理シス�
 MCPクライアントのMCPサーバー接続設定で、売上管理データに接続できるように構成します。
 
 以下は、Claude Desktop の例 (claude_desktop_config.json) です。
+`/path/to/this/project` の部分は、このプロジェクトのルートディレクトリに置き換えてください。
 
 ``` json
 {

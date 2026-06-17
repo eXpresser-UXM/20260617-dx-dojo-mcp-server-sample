@@ -1,14 +1,10 @@
 import fs from "fs/promises";
 import * as csv from "csv/sync";
 
-// 定数定義
-const STORES = ["梅田店", "難波店", "天六店", "天王寺店"];
-const MENUS = [
-  { name: "Aランチ", price: 800 },
-  { name: "Bランチ", price: 1000 },
-  { name: "Cランチ", price: 1200 },
-  { name: "Dランチ", price: 1500 },
-];
+import STORES from "./storage/_stores.json";
+import MENUS from './storage/_menus.json';
+import { differenceInDays } from "date-fns";
+import { randomInt } from "crypto";
 
 // 日付範囲設定 (2025-01-01 から 2026-06-16)
 const START_DATE = new Date("2025-01-01");
@@ -23,7 +19,6 @@ const END_DATE = new Date("2026-06-16");
 function getRandomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-
 /**
  * Dateオブジェクトを 'YYYYMMDD' 形式の文字列に変換する。
  * @param date Dateオブジェクト
@@ -39,17 +34,35 @@ function formatDateToCsv(date: Date): string {
 /**
  * 指定された店舗の売上データを生成し、CSVファイルとして保存する。
  * @param storeName 店舗名
+ * @param storeQuantity 店舗の売上数量のベース値
  */
-async function generateStoreSalesData(storeName: string): Promise<void> {
+async function generateStoreSalesData(storeName: string, storeQuantity: number): Promise<void> {
   // 過去の数量を追跡するためのマップ (メニュー名 -> 数量)
   let previousQuantities: Record<string, number> = {};
 
   console.log(`--- ${storeName} の売上データを生成中... ---`);
 
+  const startDate = new Date(START_DATE);
   let currentDate = new Date(START_DATE);
   const endDate = new Date(END_DATE);
 
   const promises: Promise<void>[] = [];
+
+  // メニューごとに売上数量のベース値をランダムに決定 (10～40の範囲)
+  const baseQuantity = MENUS.reduce((acc, menu) => {
+    acc[menu.name] = getRandomInt(10, 40);
+    return acc;
+  }, {} as Record<string, number>); // 全メニューの初期数量の合計
+  
+  // ベース値に対するランダムな揺らぎを生成するための関数
+  const jitterRateFunc = (date: Date) => {
+    // 曜日による傾向を加味 (土日は売上が上がり、水曜日は売上が落ちる傾向があると仮定)
+    const dayOfWeekEffect = (date.getDay() - 3) ** 2 / 9;
+    // 0.75～1.25の範囲で揺らぎを生成
+    const Jitter = 0.75 + dayOfWeekEffect * 0.5;
+    return Jitter;
+  }
+  const baseupRateFunc = (date: Date) => 1 + differenceInDays(date, startDate) * 0.05; // 日数経過による全体的な売上増加傾向を加味
 
   // 日付を1日ずつ進めるループ
   while (currentDate <= endDate) {
@@ -59,21 +72,10 @@ async function generateStoreSalesData(storeName: string): Promise<void> {
 
     // 1. メニューごとの売上データを生成
     for (const menu of MENUS) {
-      let quantity: number;
-
-      const previousQuantity = previousQuantities[menu.name];
-      if (!previousQuantity) {
-        // 初日：初期値は +15～+30 のランダムな数値
-        quantity = getRandomInt(15, 30);
-      } else {
-        // 2日目以降：前日の数量に [-7, +10] のランダムな増減を適用
-        const change = getRandomInt(-7, 10);
-        let newQuantity = previousQuantity + change;
-
-        // 売上数量はマイナスにならないように調整 (最低0個)
-        quantity = Math.max(0, newQuantity);
-      }
-
+      // ベース数量に曜日や経過日数による傾向を加味して、最終的な売上数量のベースを決定
+      const todayBaseQuantity = baseQuantity[menu.name]! * jitterRateFunc(currentDate) * baseupRateFunc(currentDate);
+      // ベース数量の75%～125%の範囲でランダムに決定
+      const quantity = randomInt(Math.round(0.75 * todayBaseQuantity), Math.round(1.25 * todayBaseQuantity));
       // 売上金額の計算
       const salesAmount = menu.price * quantity;
 
@@ -96,7 +98,7 @@ async function generateStoreSalesData(storeName: string): Promise<void> {
         header: true, // ヘッダー行を出力
         columns: ["メニュー名", "単価 (円)", "売上数量 (個)", "売上金額 (円)"], // ヘッダーを指定
       });
-      promises.push(fs.writeFile(`storage/${fileName}`, csvContent, "utf8"));
+      promises.push(fs.writeFile(`storage/csv/${fileName}`, csvContent, "utf8"));
       console.log(`✅ ${fileName} を正常に作成しました。`);
     } catch (error) {
       console.error(
@@ -121,8 +123,10 @@ async function main() {
   console.log("--- 全店舗の売上データ生成処理を開始します ---");
 
   // 各店舗に対して非同期でデータを生成・保存する
+  console.log(STORES);
+  console.log(MENUS);
   const generationPromises = STORES.map((storeName) =>
-    generateStoreSalesData(storeName),
+    generateStoreSalesData(storeName, randomInt(0, 30)), // 店ごとに揺らぎが出るようにランダムなベース数量を渡す
   );
 
   await Promise.all(generationPromises);

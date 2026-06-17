@@ -23,7 +23,13 @@ export const listAvailableDate: RegisterTool = (server) => server.registerTool(
     title: '取得可能店舗・日付のリスト取得',
     description: '売り上げデータが取得可能な店舗・日付のリストを取得します。',
     outputSchema: outputSchema,
-    inputSchema: inputSchema
+    inputSchema: inputSchema,
+    annotations: {
+      readOnlyHint: true, // データの取得のみを行うため、readOnlyHint は true に設定。
+      destructiveHint: false, // データを変更しないため、destructiveHint は false に設定。
+      idempotentHint: true, // 同じ入力であれば何度呼び出しても同じ結果になるため、idempotentHint は true に設定。
+      openWorldHint: false, // 入力スキーマで受け取る情報がないため、openWorldHint は false に設定。
+    }
   },
   async () => {
     // storage 配下のファイル名を取得して、CSV 名から店舗と日付を逆引きする。
