@@ -6,6 +6,8 @@ import { getAvailableStores } from "./get-stores";
 import { getAvailableItems } from "./get-items";
 import { add, format, parse } from "date-fns";
 
+// 保存ツールは、入力された売上明細の形が正しいかを先に厳密に確認する。
+// 後からCSVに書き出すため、ここで不正なデータを止めておくと分かりやすい。
 const inputSchema = z.object({
   storeName: z.string().min(1).describe('店舗名 (有効な店名である必要があります)'),
   date: z.string().regex(/^\d{8}$/).describe('売り上げデータの日付 (YYYYMMDD形式)'),
@@ -46,9 +48,12 @@ export const saveDailySales: RegisterTool = (server) => server.registerTool(
     }
   },
   async ({ storeName, date, sales }) => {
+    // 保存前に、対象店舗とメニューの一覧を読み込んでおく。
+    // これにより「存在しない店舗」や「メニュー抜け」を事前に検出できる。
     const availableStoreNames = await getAvailableStores();
     const availableMenus = await getAvailableItems();
 
+    // 店舗名が登録済みでなければ、保存をやめる。
     if (!availableStoreNames.includes(storeName)) {
       return {
         isError: true,
@@ -58,10 +63,13 @@ export const saveDailySales: RegisterTool = (server) => server.registerTool(
       };
     }
 
+    // 入力された明細に、必要なメニューが全部入っているかを確認する。
+    // 売上保存は「1 日分を丸ごと置く」前提なので、抜けや余計なメニューを検知する。
     const setMenus = new Set(sales.map(s => s.itemName));
     const missingMenus = availableMenus.filter(menu => !setMenus.has(menu.name));
     const extraMenus = sales.map(s => s.itemName).filter(itemName => !availableMenus.some(menu => menu.name === itemName));
     if (missingMenus.length > 0 || extraMenus.length > 0) {
+      // 何が足りないか、何が余計かを一つずつ示して、修正しやすくする。
       const messages = [];
       if (missingMenus.length > 0) {
         messages.push(`以下のメニューが売り上げ明細に含まれていません: ${missingMenus.map(menu => menu.name).join(", ")}`);
@@ -76,10 +84,12 @@ export const saveDailySales: RegisterTool = (server) => server.registerTool(
         ],
       };
     }
-
+      // 保存先は「1日1店舗1ファイル」のルールにそろえる。
+      // こうしておくと、あとで読み返す側がファイル名だけで内容を判断しやすい。
     // 保存先は 1日1店舗1ファイル（YYYYMMDD_店舗名.csv）。
     const filePath = `${projectRoot}/storage/csv/${date}_${storeName}.csv`;
-
+      // 入力された金額はそのまま使わず、単価 × 数量 で再計算する。
+      // 手入力や呼び出し側の誤りがあっても、保存データの整合性を保つため。
     // 入力明細を CSV 列仕様へ正規化し、金額は単価×数量で再計算する。
     const rows = sales.map((sale) => {
       const unitPrice = availableMenus.find(menu => menu.name === sale.itemName)?.price ?? 0;
@@ -91,7 +101,7 @@ export const saveDailySales: RegisterTool = (server) => server.registerTool(
       };
     });
 
-    // ヘッダ付き・BOM付きで CSV 文字列を作る（Excel でも開きやすい）。
+    // Excel で開いたときに文字化けしにくいよう、BOM 付きで CSV を書き出す。
     const csvText = csv.stringify(
       rows.map(row => ([
         row.itemName,
@@ -106,17 +116,17 @@ export const saveDailySales: RegisterTool = (server) => server.registerTool(
       }
     );
 
-    // ファイルへ保存。
+    // 実際にファイルへ保存する。
     await fs.writeFile(filePath, csvText, "utf-8");
 
-    // 保存結果を API 返却フォーマットへ整形。
+    // 保存した内容を、呼び出し元が確認しやすい形で返す。
     const jsonResult: z.infer<typeof outputSchema> = {
       storeName,
       date,
       sales: rows,
     };
 
-      // 保存成功レスポンス。
+    // 保存成功レスポンス。
     return {
       isError: false,
       structuredContent: jsonResult,
@@ -126,18 +136,20 @@ export const saveDailySales: RegisterTool = (server) => server.registerTool(
 );
 
 const getPreviousUnitPrices = async (storeName: string, date: string, availableMenus: string[]): Promise<{itemName: string, unitPrice: number}[]> => {
-  // 指定店で前の日付の同じメニューの単価を取得するため、前日の日付を計算。
+  // ある日付の単価一覧を作るために、指定日より前の日付を順に探す。
+  // 直近の過去データを見つけて、同じメニューの価格を補うための補助関数。
   const unitPrices: {itemName: string, unitPrice: number}[] = [];
   let tDate = parse(date, 'yyyyMMdd', new Date());
   while (unitPrices.length < availableMenus.length) {
     if (tDate < new Date(2000, 0, 1)) {
-      // 2000年1月1日より前はさすがに遡りすぎなので打ち切る。
+      // これ以上さかのぼると探索が長すぎるので、無限に近いループを防ぐ。
       throw new Error(`有効な単価データが見つかりませんでした。店舗: ${storeName}, 日付: ${date} より前のデータを遡りましたが、2000年1月1日を超えました。`);
     }
 
     const fotmattedDate = format(tDate, 'yyyyMMdd');
     const filePath = `${projectRoot}/storage/csv/${fotmattedDate}_${storeName}.csv`;
     try {
+      // 見つかった CSV から、メニュー名と単価を抜き出していく。
       const csvContent = await fs.readFile(filePath, "utf-8");
       const rows = await new Promise<Record<string, string>[]>((resolve, reject) => {
         csv.parse(csvContent, { columns: true, trim: true, bom: true }, (err, records) => {
@@ -157,7 +169,7 @@ const getPreviousUnitPrices = async (storeName: string, date: string, availableM
         }
       });
     } catch (error) {
-      // ファイルが存在しない場合は前日へ遡る。
+      // その日の CSV が無ければ、前日に戻って再探索する。
       tDate = add(tDate, { days: -1 });
     }
   }

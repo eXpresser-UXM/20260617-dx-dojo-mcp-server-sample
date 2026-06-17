@@ -5,13 +5,14 @@ import * as csv from "csv";
 import {addDays, format, parse} from "date-fns";
 import { getAvailableStores } from "./get-stores";
 
-// 店舗名と取得期間を受け取る入力スキーマ。
+// このツールは「どの店舗の、どの期間の明細を取るか」を明示的に受け取る。
+// 形式を固定することで、入力ミスを早い段階で見つけやすくする。
 const inputSchema = z.object({
   storeName: z.string().min(1).describe('店舗名'),
   from: z.string().regex(/^\d{8}$/).describe('取得期間の開始日 (YYYYMMDD形式、その日を含む)'),
   to: z.string().regex(/^\d{8}$/).describe('取得期間の終了日 (YYYYMMDD形式、その日を含む)'),
 });
-// 明細データを日付ごとに返す出力スキーマ。
+// 日ごとの明細を返すので、日付ごとに売上明細の配列を持つ形にする。
 const outputSchema = z.object({
   storeName: z.string().describe('店舗名'),
   sales: z.array(
@@ -45,6 +46,8 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
     }
   },
   async ({storeName, from, to}) => {
+    // まず、指定された店舗が本当に存在するかを確認する。
+    // 先に止めることで、後続の CSV 読み込みで余計なエラーを出さない。
     if (!(await getAvailableStores()).includes(storeName)) {
       return {
         isError: true,
@@ -57,11 +60,11 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
       };
     }
 
-    // 文字列日付を Date に変換して比較可能にする。
+    // 文字列の日付を Date に変換して、期間比較できるようにする。
     const dateFrom = parse(from, 'yyyyMMdd', new Date())
     const dateTo = parse(to, 'yyyyMMdd', new Date())
 
-    // 入力ミス（開始日 > 終了日）は早期にエラー返却。
+    // 開始日が終了日より後なら、入力の向きが逆なのでエラーにする。
     if (dateFrom > dateTo) {
       return {
         isError: true,
@@ -74,19 +77,20 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
       }
     }
 
-    // 取得期間を1日ごとにyyyyMMdd形式の文字列に変換してリスト化
+    // 期間を1日ずつたどるため、日付の配列を先に作る。
+    // こうしておくと、各日付の CSV を並列に読み込める。
     const dateList: string[] = [];
     for (let d = dateFrom; d <= dateTo; d = addDays(d, 1)) {
       dateList.push(format(d, 'yyyyMMdd'));
     }
 
-    // 日ごとの CSV 読み込みを並列実行し、全日分をまとめて取得する。
+    // 各日付の CSV をまとめて読み込み、日別明細の配列を作る。
     const sales = await Promise.all(
       dateList.map(async (date) => {
         const filePath = `${projectRoot}/storage/csv/${date}_${storeName}.csv`;
 
         try {
-          // CSV をテキストで読み込み、ヘッダ付きレコードへパース。
+          // CSV はテキストとして読み込み、ヘッダ付きレコードに変換する。
           const csvContent = await fs.readFile(filePath, "utf-8");
           const rows = await new Promise<Record<string, string>[]>((resolve, reject) => {
             csv.parse(csvContent, { columns: true, trim: true, bom: true }, (err, records) => {
@@ -98,7 +102,7 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
             });
           });
 
-          // CSV の列名を API 返却用のフィールドへ正規化する。
+          // CSV の列名は人間向けの日本語ヘッダなので、API 返却用の名前に整える。
           const details = rows.map((row) => ({
             itemName: row["メニュー名"] ?? "",
             unitPrice: Number(row["単価 (円)"] ?? 0),
@@ -112,23 +116,23 @@ export const getSalesRowdata: RegisterTool = (server) => server.registerTool(
           };
         } catch (error) {
           const errorCode = (error as NodeJS.ErrnoException).code;
-          // 該当日のファイルが無い場合は「データなし」として null を返し、後段で除去する。
+          // その日の CSV が存在しない場合は、無理に失敗させず「データなし」として扱う。
           if (errorCode === "ENOENT") {
             return null;
           }
-          // 想定外エラーは握りつぶさずに上位へ伝播。
+          // それ以外のエラーは、隠さずにそのまま上へ返す。
           throw error;
         }
       })
     );
 
-    // null（欠損日）を取り除いたうえで最終レスポンスを構築。
+    // ファイルがなかった日を取り除いて、利用しやすい形にまとめる。
     const jsonResult: z.infer<typeof outputSchema> = {
       storeName,
       sales: sales.filter((sale): sale is { date: string; details: { itemName: string; unitPrice: number; quantity: number; amount: number }[] } => sale !== null),
     };
 
-    // structuredContent は機械向け、content は汎用テキスト表示向け。
+    // structuredContent はプログラム向け、content は画面表示向け。
     return {
       isError: false,
       structuredContent: jsonResult,

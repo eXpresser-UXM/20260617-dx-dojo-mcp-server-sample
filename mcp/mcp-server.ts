@@ -6,8 +6,8 @@ import { getStores } from "./tools/get-stores";
 import { getItems } from "./tools/get-items";
 
 export const getServer = () => {
-  // MCP サーバー本体を初期化。
-  // ここで設定する name / description / version はクライアント側の表示にも利用される。
+  // まず、MCP クライアントに見せる「サーバーの顔」を作る。
+  // name / description / version は、Inspector や Claude Desktop の一覧表示にそのまま出る。
   const server = new McpServer(
     {
       name: "売上管理システム",
@@ -16,14 +16,15 @@ export const getServer = () => {
     }
   );
 
-  // 以降で業務機能をサーバーに登録する。
+  // ここで「このサーバーが何をできるか」を1つずつ登録する。
+  // ツールはあとから並び順ごと見つけやすいよう、役割の近いものをまとめている。
   getStores(server);
   getItems(server);
   listAvailableDate(server);
   getSalesRowdata(server);
   saveDailySales(server);
 
-  // すべて登録済みのサーバーを呼び出し元へ返す。
+  // 登録が完了したサーバーを返す。呼び出し元はこの server を起動するだけでよい。
   return server;
   
 }

@@ -1,19 +1,20 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { getServer } from "./mcp-server";
 
-// MCP サーバーを STDIO 経由で起動する。
-// ローカル開発時にクライアント（Inspector など）と接続しやすいエントリポイント。
+// このファイルは、MCP サーバーを標準入出力で起動するための入口。
+// Claude Desktop や Inspector は、この STDIO 方式でサーバーと会話する。
 const runStdio = async () => {
-  // ツール・プロンプト登録済みのサーバーインスタンスを作成。
+  // まず、ツール登録が済んだサーバー本体を作る。
   const server = getServer();
-  // 入出力を標準入出力に紐づけるトランスポートを用意。
+  // 標準入出力を使ってやり取りするための通路を用意する。
   const transport = new StdioServerTransport();
 
-  // サーバーを接続開始し、受信待ち状態にする。
+  // 実際に接続して、クライアントからのリクエストを待ち受ける。
   await server.connect(transport);
 }
 
-// 起動失敗時は理由を表示し、異常終了であることが分かるように終了コード 1 を返す。
+// 起動に失敗したら原因を表示して、プロセスを異常終了させる。
+// こうしておくと、設定ミスや依存関係の問題がすぐ分かる。
 runStdio().catch((err) => {
   console.error("Error starting MCP STDIO Server:", err);
   process.exit(1);

@@ -2,7 +2,7 @@ import z from "zod";
 import { projectRoot, type RegisterTool } from "../lib";
 import fs from "fs/promises";
 
-// 入力不要のツールなので inputSchema は undefined。
+// このツールは「店舗名の一覧を返すだけ」なので、利用者からの入力は不要。
 const inputSchema = undefined;
 const outputSchema = z.object({
   storeNames: z.array(z.string()).describe('店舗名のリスト')
@@ -23,6 +23,8 @@ export const getStores: RegisterTool = (server) => server.registerTool(
   },
   async () => {
     try {
+      // JSON ファイルに保存された店舗一覧を読み込んで返す。
+      // 売上データの保存や検索では、まず対象店舗を知る必要があるため、このツールを独立させている。
       const storeNames = await getAvailableStores();
       const jsonResult: z.infer<typeof outputSchema> = {
         storeNames
@@ -46,9 +48,12 @@ export const getStores: RegisterTool = (server) => server.registerTool(
   }
 );
 
+// storage/_stores.json だけを読んで、店舗名の配列にして返す。
+// ファイルの場所をここにまとめておくと、他のツールからも再利用しやすい。
 export const getAvailableStores = async (): Promise<string[]> => {
   const filePath = `${projectRoot}/storage/_stores.json`;
   try {
+    // JSON の中身は単純な文字列配列を想定している。
     const fileContent = await fs.readFile(filePath, 'utf-8');
     const storeNames: string[] = JSON.parse(fileContent);
     return storeNames;
