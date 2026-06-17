@@ -6,7 +6,8 @@ import MENUS from './storage/_menus.json';
 import { differenceInDays } from "date-fns";
 import { randomInt } from "crypto";
 
-// 日付範囲設定 (2025-01-01 から 2026-06-16)
+// 例示用データの生成範囲。
+// README やハンズオンで見せるサンプルとして、ある程度長い期間の CSV をまとめて作る。
 const START_DATE = new Date("2025-01-01");
 const END_DATE = new Date("2026-06-16");
 
@@ -17,6 +18,7 @@ const END_DATE = new Date("2026-06-16");
  * @returns ランダムな整数
  */
 function getRandomInt(min: number, max: number): number {
+  // ランダム値を作って、毎回少しずつ違う売上に見せる。
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 /**
@@ -25,6 +27,7 @@ function getRandomInt(min: number, max: number): number {
  * @returns YYYYMMDD形式の文字列
  */
 function formatDateToCsv(date: Date): string {
+  // ファイル名に使いやすいよう、YYYYMMDD 形式へ変換する。
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -37,7 +40,8 @@ function formatDateToCsv(date: Date): string {
  * @param storeQuantity 店舗の売上数量のベース値
  */
 async function generateStoreSalesData(storeName: string, storeQuantity: number): Promise<void> {
-  // 過去の数量を追跡するためのマップ (メニュー名 -> 数量)
+  // メニューごとの数量推移を覚えておくための入れ物。
+  // 今回のコードでは主に説明用で、将来の拡張で使いやすい形にしている。
   let previousQuantities: Record<string, number> = {};
 
   console.log(`--- ${storeName} の売上データを生成中... ---`);
@@ -48,38 +52,43 @@ async function generateStoreSalesData(storeName: string, storeQuantity: number):
 
   const promises: Promise<void>[] = [];
 
-  // メニューごとに売上数量のベース値をランダムに決定 (10～40の範囲)
+  // 各メニューの「その店舗らしさ」を表す基準数量を先に決める。
+  // このベースがあることで、日ごとの売上が完全に同じにならない。
   const baseQuantity = MENUS.reduce((acc, menu) => {
     acc[menu.name] = getRandomInt(10, 40);
     return acc;
-  }, {} as Record<string, number>); // 全メニューの初期数量の合計
+  }, {} as Record<string, number>);
   
-  // ベース値に対するランダムな揺らぎを生成するための関数
+  // 日ごとの売上に少し波をつけるための補正関数。
+  // 曜日や経過日数による自然な変化に見せるために使う。
   const jitterRateFunc = (date: Date) => {
-    // 曜日による傾向を加味 (土日は売上が上がり、水曜日は売上が落ちる傾向があると仮定)
+    // 曜日による傾向を加味する。
+    // 中央の曜日から離れるほど値が大きくなり、売上が増減するイメージを作っている。
     const dayOfWeekEffect = (date.getDay() - 3) ** 2 / 9;
-    // 0.75～1.25の範囲で揺らぎを生成
+    // 最終的に 0.75 ～ 1.25 程度の揺らぎにする。
     const Jitter = 0.75 + dayOfWeekEffect * 0.5;
     return Jitter;
   }
-  const baseupRateFunc = (date: Date) => 1 + differenceInDays(date, startDate) * 0.05; // 日数経過による全体的な売上増加傾向を加味
+  // 日数が経つほど少しずつ売上が増えるように見せるための係数。
+  // 「新しい日ほど少し売れる」ような見た目を作る。
+  const baseupRateFunc = (date: Date) => 1 + differenceInDays(date, startDate) * 0.05;
 
-  // 日付を1日ずつ進めるループ
+  // 1日ずつ進めながら、各日付の CSV を作成する。
   while (currentDate <= endDate) {
     const dateStr = formatDateToCsv(currentDate);
     const fileName = `${dateStr}_${storeName}.csv`;
     const records: any[] = [];
 
-    // 1. メニューごとの売上データを生成
+    // その日に売れる各メニューの行を作る。
     for (const menu of MENUS) {
-      // ベース数量に曜日や経過日数による傾向を加味して、最終的な売上数量のベースを決定
+      // 基準数量に曜日の変化と日数経過の変化を掛け合わせて、その日のベースを作る。
       const todayBaseQuantity = baseQuantity[menu.name]! * jitterRateFunc(currentDate) * baseupRateFunc(currentDate);
-      // ベース数量の75%～125%の範囲でランダムに決定
+      // そこからさらに少しだけ上下に揺らして、機械的すぎない値にする。
       const quantity = randomInt(Math.round(0.75 * todayBaseQuantity), Math.round(1.25 * todayBaseQuantity));
-      // 売上金額の計算
+      // 金額は単価 × 数量で計算する。
       const salesAmount = menu.price * quantity;
 
-      // CSVヘッダーに合わせてデータを格納
+      // CSV の列名に合わせて、1 行分のデータをオブジェクトで作る。
       records.push({
         メニュー名: menu.name,
         "単価 (円)": menu.price,
@@ -87,16 +96,16 @@ async function generateStoreSalesData(storeName: string, storeQuantity: number):
         "売上金額 (円)": salesAmount,
       });
 
-      // 次の日の計算のために現在の数量を保存
+      // もし今後「前日との差分」を作るときに使えるよう、数量を記録しておく。
       previousQuantities[menu.name] = quantity;
     }
 
-    // 2. CSVファイルとして書き出し
+    // 1日分のレコードを CSV 文字列にしてファイルへ書き出す。
     try {
       const csvContent = csv.stringify(records, {
-        bom: true, // UTF-8 BOMを付加してExcelでの文字化けを防止
-        header: true, // ヘッダー行を出力
-        columns: ["メニュー名", "単価 (円)", "売上数量 (個)", "売上金額 (円)"], // ヘッダーを指定
+        bom: true,
+        header: true,
+        columns: ["メニュー名", "単価 (円)", "売上数量 (個)", "売上金額 (円)"],
       });
       promises.push(fs.writeFile(`storage/csv/${fileName}`, csvContent, "utf8"));
       console.log(`✅ ${fileName} を正常に作成しました。`);
@@ -107,11 +116,11 @@ async function generateStoreSalesData(storeName: string, storeQuantity: number):
       );
     }
 
-    // 日付を翌日に進める
+    // 次の日へ進む。
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
-  // 全てのファイル書き込みが完了するのを待機
+  // すべてのファイル書き込みが終わるまで待つ。
   await Promise.all(promises);
   console.log(`--- ${storeName} の売上データ生成が完了しました ---\n`);
 }
@@ -122,11 +131,14 @@ async function generateStoreSalesData(storeName: string, storeQuantity: number):
 async function main() {
   console.log("--- 全店舗の売上データ生成処理を開始します ---");
 
-  // 各店舗に対して非同期でデータを生成・保存する
+  // まず、読み込んだ店舗一覧とメニュー一覧を確認できるように出力する。
+  // ハンズオン時に、どのデータがもとになっているかを見せやすくするため。
   console.log(STORES);
   console.log(MENUS);
+  // 各店舗ごとに別々の売上データ生成を走らせる。
+  // まとめて並行実行することで、全体の生成時間を短くしている。
   const generationPromises = STORES.map((storeName) =>
-    generateStoreSalesData(storeName, randomInt(0, 30)), // 店ごとに揺らぎが出るようにランダムなベース数量を渡す
+    generateStoreSalesData(storeName, randomInt(0, 30)),
   );
 
   await Promise.all(generationPromises);

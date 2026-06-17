@@ -2,10 +2,9 @@ import z from "zod";
 import { projectRoot, type RegisterTool } from "../lib";
 import fs from "fs/promises";
 
-// 入力不要のツールなので inputSchema は undefined。
+// 利用者入力が不要な「参照専用ツール」なので、inputSchema は持たない。
 const inputSchema = undefined;
-// ツールの返却 JSON 形式を厳密に定義。
-// クライアント側が型安全に結果を扱えるようにする。
+// 出力の形を先に決めておくと、クライアントが結果を読み取りやすくなる。
 const outputSchema = z.object({
   data: z.array(
     z.object({
@@ -32,27 +31,27 @@ export const listAvailableDate: RegisterTool = (server) => server.registerTool(
     }
   },
   async () => {
-    // storage 配下のファイル名を取得して、CSV 名から店舗と日付を逆引きする。
+    // storage 配下にあるファイル名を見て、どの店舗にどの日付のCSVがあるかを逆算する。
     const fileList = await fs.readdir(`${projectRoot}/storage`);
-    // { 店舗名: [日付, 日付, ...] } という一時集約用オブジェクト。
+    // いったん { 店舗名: [日付, 日付, ...] } の形で集約してから返す。
     const availableDates: Record<string, string[]> = {};
 
     for (const fileName of fileList) {
-      // CSV 以外のファイル（メモや隠しファイルなど）は対象外。
+      // CSV 以外のファイルは売上データではないので対象外にする。
       if (!fileName.endsWith('.csv')) continue;
-      // ファイル名形式: YYYYMMDD_店舗名.csv
+      // ファイル名形式は YYYYMMDD_店舗名.csv を前提にしている。
       const [date, storeName] = fileName.replace('.csv', '').split('_');
 
-      // 想定外の命名は無視して処理継続。
+      // 想定外のファイル名は無理に解釈せず、そのまま飛ばす。
       if (!date || !storeName) continue;
       if (!availableDates[storeName]) {
         availableDates[storeName] = [];
       }
-      // 店舗ごとに利用可能日付を追加。
+      // 同じ店舗のファイルを日付ごとに積み上げる。
       availableDates[storeName].push(date);
     }
 
-    // スキーマ準拠の最終レスポンスを構築。
+    // 返却しやすいように、オブジェクトを配列に変換して最終レスポンスにする。
     const jsonResult: z.infer<typeof outputSchema> = {
       data: Object.entries(availableDates).map(([storeName, dates]) => ({
           storeName,
@@ -60,7 +59,7 @@ export const listAvailableDate: RegisterTool = (server) => server.registerTool(
         }))
       };
 
-    // structuredContent は機械向け、content はテキスト表示向け。
+    // structuredContent はプログラム向け、content は人が読むテキスト向け。
     return {
       isError: false,
       structuredContent: jsonResult,

@@ -2,7 +2,7 @@ import z from "zod";
 import { projectRoot, type RegisterTool } from "../lib";
 import fs from "fs/promises";
 
-// 入力不要のツールなので inputSchema は undefined。
+// このツールはメニュー一覧を返すだけなので、入力は受け取らない。
 const inputSchema = undefined;
 const outputSchema = z.object({
   items: z.array(z.object({
@@ -26,6 +26,8 @@ export const getItems: RegisterTool = (server) => server.registerTool(
   },
   async () => {
     try {
+      // メニュー名と単価をまとめた一覧を返す。
+      // 売上保存時に「存在するメニューか」「いくらで売るか」を確認する基準データになる。
       const items = await getAvailableItems();
       const jsonResult: z.infer<typeof outputSchema> = {
         items
@@ -49,9 +51,12 @@ export const getItems: RegisterTool = (server) => server.registerTool(
   }
 );
 
+// storage/_menus.json を読み込み、メニュー名と価格の配列に変換する。
+// ここで一元管理しておくことで、保存ツールと参照ツールの整合性を保ちやすくなる。
 export const getAvailableItems = async (): Promise<{ name: string; price: number }[]> => {
   const filePath = `${projectRoot}/storage/_menus.json`;
   try {
+    // JSON の内容は { name, price } の配列として扱う。
     const fileContent = await fs.readFile(filePath, 'utf-8');
     const menuNames: { name: string; price: number }[] = JSON.parse(fileContent);
     return menuNames;
